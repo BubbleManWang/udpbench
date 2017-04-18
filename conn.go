@@ -6,6 +6,7 @@ import (
 	"net"
 )
 
+// our struct for passing data and client addresses around
 type netcodeData struct {
 	data []byte
 	from *net.UDPAddr
@@ -17,21 +18,23 @@ const (
 	SOCKET_SNDBUF_SIZE = 1024 * 1024
 )
 
+// allows for supporting custom handlers
 type NetcodeRecvHandler func(data *netcodeData)
 
 type NetcodeConn struct {
-	conn     *net.UDPConn
-	closeCh  chan struct{}
-	isClosed bool
+	conn     *net.UDPConn  // the underlying connection
+	closeCh  chan struct{} // used for closing the connection/signaling
+	isClosed bool          // is this connection open/closed?
 
-	recvSize   int
-	sendSize   int
-	maxBytes   int
-	maxPackets int
+	recvSize   int // how many bytes to read
+	sendSize   int // how many bytes to send
+	maxBytes   int // maximum allowed bytes
+	maxPackets int // maximum number of packets (not used in this version)
 
 	recvHandlerFn NetcodeRecvHandler
 }
 
+// Creates a new netcode connection
 func NewNetcodeConn() *NetcodeConn {
 	c := &NetcodeConn{}
 
@@ -129,7 +132,6 @@ func (c *NetcodeConn) Listen(address *net.UDPAddr) error {
 
 func (c *NetcodeConn) create() error {
 	c.isClosed = false
-
 	c.conn.SetReadBuffer(c.recvSize)
 	c.conn.SetWriteBuffer(c.sendSize)
 	go c.readLoop()
@@ -153,8 +155,8 @@ func (c *NetcodeConn) receiver(ch chan *netcodeData) {
 }
 
 // read does the actual connection read call, verifies we have a
-// buffer > 0 and < maxBytes and is of a valid packet type before
-// we bother to attempt to actually dispatch it to the recvHandlerFn.
+// buffer > 0 and < maxBytes before we bother to attempt to actually
+// dispatch it to the recvHandlerFn.
 func (c *NetcodeConn) read() (*netcodeData, error) {
 	var n int
 	var from *net.UDPAddr

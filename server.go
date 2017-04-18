@@ -5,24 +5,27 @@ import (
 	"net"
 )
 
+// used for holding references to our clients
 type clientInstance struct {
-	address      *net.UDPAddr
-	lastRecvTime float64
-	payloadCount int
+	address      *net.UDPAddr // the address of the client
+	lastRecvTime float64      // last time we recv'd a packet
+	payloadCount int          // how many payload+pings we saw from this client
 }
 
 type Server struct {
-	conn         *NetcodeConn
-	addr         *net.UDPAddr
-	packetCh     chan *netcodeData
-	maxClients   int
-	clients      []*clientInstance
-	lastSendTime float64
-	serverTime   float64
+	conn         *NetcodeConn      // the underlying connection
+	addr         *net.UDPAddr      // the server address
+	packetCh     chan *netcodeData // channel used for synchronizing packet data
+	maxClients   int               // maximum number of clients
+	clients      []*clientInstance // our slice of clients, pre allocated
+	lastSendTime float64           // last time we sent data
+	serverTime   float64           // the last serverTime/time Update was called
 }
 
+// super basic ping packet
 var ping = []byte("ping")
 
+// Creates a new server, pre-allocating clients
 func NewServer(maxClients int, addr *net.UDPAddr) *Server {
 	s := &Server{addr: addr, maxClients: maxClients}
 	s.packetCh = make(chan *netcodeData, (maxClients*MAX_PACKETS)*2)
@@ -33,6 +36,7 @@ func NewServer(maxClients int, addr *net.UDPAddr) *Server {
 	return s
 }
 
+// listens on the address that was provided to NewServer
 func (s *Server) Listen() error {
 	s.conn = NewNetcodeConn()
 	s.conn.SetRecvHandler(s.onPacket)
@@ -40,6 +44,9 @@ func (s *Server) Listen() error {
 	return s.conn.Listen(s.addr)
 }
 
+// Called every 'tick' of the ficticious game loop.
+// recv's data first, checks if we need to send pings, then checks if clients
+// have timed out.
 func (s *Server) Update(serverTime float64) {
 	s.serverTime = serverTime
 
@@ -62,6 +69,7 @@ DONE:
 
 }
 
+// iterate over client list and check if we should remove their entry (by setting the properties to 0 values/nil)
 func (s *Server) checkTimeouts(serverTime float64) {
 	for i := 0; i < len(s.clients); i += 1 {
 		instance := s.clients[i]
@@ -75,10 +83,12 @@ func (s *Server) checkTimeouts(serverTime float64) {
 	}
 }
 
+// netcode conn sent us data, buffer it in our packetCh
 func (s *Server) onPacket(data *netcodeData) {
 	s.packetCh <- data
 }
 
+// send some payload/ping data
 func (s *Server) Send(data []byte) {
 	for i := 0; i < len(s.clients); i += 1 {
 		if s.clients[i].address != nil {
@@ -87,13 +97,14 @@ func (s *Server) Send(data []byte) {
 	}
 }
 
+// process the packet data, finds first empty entry in our client list
 func (s *Server) OnPacketData(data []byte, addr *net.UDPAddr) {
 	full := true
 
 	// basic client checks
 	for i := 0; i < len(s.clients); i += 1 {
 		instance := s.clients[i]
-		if instance.address == nil {
+		if instance.address != nil && addressEqual(instance.addr, addr2) {
 			full = false
 			instance.address = addr
 			instance.lastRecvTime = s.serverTime
