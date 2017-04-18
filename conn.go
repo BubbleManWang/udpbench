@@ -40,6 +40,7 @@ func NewNetcodeConn() *NetcodeConn {
 
 	c.closeCh = make(chan struct{})
 	c.isClosed = true
+
 	c.maxBytes = MAX_PACKET_BYTES
 	c.maxPackets = MAX_PACKETS
 	c.recvSize = SOCKET_RCVBUF_SIZE
@@ -140,7 +141,6 @@ func (c *NetcodeConn) create() error {
 
 func (c *NetcodeConn) receiver(ch chan *netcodeData) {
 	for {
-
 		if netData, err := c.read(); err == nil {
 			select {
 			case ch <- netData:
@@ -163,7 +163,6 @@ func (c *NetcodeConn) read() (*netcodeData, error) {
 	var err error
 	netData := &netcodeData{}
 	netData.data = make([]byte, c.maxBytes)
-
 	n, from, err = c.conn.ReadFromUDP(netData.data)
 	if err != nil {
 		return nil, err
