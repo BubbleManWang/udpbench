@@ -99,19 +99,24 @@ func (s *Server) Send(data []byte) {
 
 // process the packet data, finds first empty entry in our client list
 func (s *Server) OnPacketData(data []byte, addr *net.UDPAddr) {
-	full := true
 
-	// basic client checks
+	// already exists? update
 	for i := 0; i < len(s.clients); i += 1 {
 		instance := s.clients[i]
-		if instance.address != nil && addressEqual(instance.addr, addr2) {
-			full = false
-			instance.address = addr
+		if instance.address != nil && addressEqual(instance.address, addr) {
 			instance.lastRecvTime = s.serverTime
 			instance.payloadCount++
-			break
-		} else if addressEqual(instance.address, addr) {
+			return
+		}
+	}
+
+	// doesn't exist add a new entry unless all entries are full
+	full := true
+	for i := 0; i < len(s.clients); i += 1 {
+		instance := s.clients[i]
+		if instance.address == nil {
 			full = false
+			instance.address = addr
 			instance.lastRecvTime = s.serverTime
 			instance.payloadCount++
 			break
@@ -122,8 +127,6 @@ func (s *Server) OnPacketData(data []byte, addr *net.UDPAddr) {
 		log.Printf("ignored, server full")
 		return
 	}
-
-	//log.Printf("got data: len(%d) from %s\n", len(data), addr.String())
 }
 
 func addressEqual(addr1, addr2 *net.UDPAddr) bool {
