@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"log"
 	"net"
 )
@@ -9,7 +10,8 @@ import (
 type clientInstance struct {
 	address      *net.UDPAddr // the address of the client
 	lastRecvTime float64      // last time we recv'd a packet
-	payloadCount int          // how many payload+pings we saw from this client
+	payloadCount int          // how many payload we saw from this client
+	pingCount    int          // how many pings we saw from this client
 }
 
 type Server struct {
@@ -75,10 +77,11 @@ func (s *Server) checkTimeouts(serverTime float64) {
 		instance := s.clients[i]
 		// timeout if lastRecvTime + runTime + 1 second is > server time.
 		if instance.address != nil && instance.lastRecvTime+runTime+1.0 < serverTime {
-			log.Printf("client: (idx: %d) sent %d payload & pings\n", i, instance.payloadCount)
+			log.Printf("client: (%s) sent %d/%d payload/pings\n", instance.address.String(), instance.payloadCount, instance.pingCount)
 			instance.address = nil
 			instance.lastRecvTime = 0
 			instance.payloadCount = 0
+			instance.pingCount = 0
 		}
 	}
 }
@@ -105,7 +108,11 @@ func (s *Server) OnPacketData(data []byte, addr *net.UDPAddr) {
 		instance := s.clients[i]
 		if instance.address != nil && addressEqual(instance.address, addr) {
 			instance.lastRecvTime = s.serverTime
-			instance.payloadCount++
+			if bytes.Equal(ping, data) {
+				instance.pingCount++
+			} else {
+				instance.payloadCount++
+			}
 			return
 		}
 	}
@@ -118,7 +125,11 @@ func (s *Server) OnPacketData(data []byte, addr *net.UDPAddr) {
 			full = false
 			instance.address = addr
 			instance.lastRecvTime = s.serverTime
-			instance.payloadCount++
+			if bytes.Equal(ping, data) {
+				instance.pingCount++
+			} else {
+				instance.payloadCount++
+			}
 			break
 		}
 	}

@@ -2,9 +2,12 @@ package main
 
 import (
 	"flag"
+	"github.com/pkg/profile"
 	"log"
 	"math/rand"
 	"net"
+	"os"
+	"os/signal"
 	"sync"
 	"time"
 )
@@ -14,11 +17,13 @@ const MAX_PACKETS = 256
 var serverMode bool
 var maxClients int
 var runTime float64
+var runProfiler bool
 
 var addr = &net.UDPAddr{IP: net.ParseIP("::1"), Port: 40000}
 
 func init() {
-	flag.BoolVar(&serverMode, "server", false, "set false for client mode")
+	flag.BoolVar(&serverMode, "server", false, "pass this flag to run the server")
+	flag.BoolVar(&runProfiler, "prof", false, "pass this flag to enable profiling")
 	flag.IntVar(&maxClients, "num", 64, "number of clients to serve or to create")
 	flag.Float64Var(&runTime, "runtime", 5.0, "how long to run clients for/clear client buffer in seconds")
 
@@ -29,6 +34,11 @@ func main() {
 	packetData := make([]byte, 1220)
 	for i := 0; i < len(packetData); i += 1 {
 		packetData[i] = byte(i)
+	}
+
+	if runProfiler {
+		p := profile.Start(profile.MemProfile, profile.ProfilePath("."), profile.NoShutdownHook)
+		defer p.Stop()
 	}
 
 	if serverMode {
@@ -45,6 +55,9 @@ func main() {
 }
 
 func serveLoop(packetData []byte) {
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+
 	serverTime := float64(0)
 	delta := float64(1.0 / 60.0)
 	deltaTime := time.Duration(delta * float64(time.Second))
@@ -55,6 +68,11 @@ func serveLoop(packetData []byte) {
 		log.Fatalf("error listening: %s\n", err)
 	}
 	for {
+		select {
+		case <-c:
+			return
+		default:
+		}
 		serv.Update(serverTime)
 		// do simulation/process payload packets
 
@@ -89,7 +107,7 @@ func clientLoop(wg *sync.WaitGroup, packetData []byte, index int) {
 		c.Update(clientTime)
 		// run for about 5 seconds
 		if clientTime > runTime {
-			log.Printf("client (%d) %d payloads, %d pings for %d iterations", index, c.PayloadCount(), c.PingCount(), iter)
+			log.Printf("client (%d) %drx/%dtx, %d pings\n", index, c.PayloadCount(), iter, c.PingCount())
 			wg.Done()
 			return
 		}
