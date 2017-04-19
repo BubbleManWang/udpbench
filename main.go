@@ -75,7 +75,6 @@ func serveLoop(packetData []byte) {
 	if err := serv.Listen(); err != nil {
 		log.Fatalf("error listening: %s\n", err)
 	}
-	printed := false
 	for {
 		select {
 		case <-c:
@@ -83,10 +82,6 @@ func serveLoop(packetData []byte) {
 		default:
 		}
 
-		if !printed && serverTime+1.0 > runTime {
-			log.Printf("%d sent in %f seconds\n", serv.sendCount, serverTime)
-			printed = true
-		}
 		serv.Update(serverTime)
 		// do simulation/process payload packets
 

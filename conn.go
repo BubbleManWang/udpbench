@@ -196,7 +196,7 @@ func (c *NetcodeConn) readLoop() {
 		select {
 		case data := <-dataCh:
 			//c.conn.WriteTo(data.data, data.from)
-			go c.recvHandlerFn(data)
+			c.recvHandlerFn(data)
 		case <-c.closeCh:
 			return
 		}
