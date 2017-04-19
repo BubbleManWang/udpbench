@@ -1,3 +1,6 @@
 *.exe~
 udpbench.exe
 *.pprof
+udpbench
+
+*.out

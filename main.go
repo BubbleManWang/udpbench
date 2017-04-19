@@ -2,10 +2,12 @@ package main
 
 import (
 	"flag"
-	"github.com/pkg/profile"
+	//"github.com/pkg/profile"
 	"log"
 	"math/rand"
 	"net"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"sync"
@@ -18,6 +20,9 @@ var serverMode bool
 var maxClients int
 var runTime float64
 var runProfiler bool
+var runTrace bool
+var runMem bool
+var runCpu bool
 
 var addr = &net.UDPAddr{IP: net.ParseIP("::1"), Port: 40000}
 
@@ -37,8 +42,11 @@ func main() {
 	}
 
 	if runProfiler {
-		p := profile.Start(profile.MemProfile, profile.ProfilePath("."), profile.NoShutdownHook)
-		defer p.Stop()
+		go func() {
+			log.Println(http.ListenAndServe("localhost:6060", nil))
+		}()
+		//p := profile.Start(profile.TraceProfile, profile.ProfilePath("."), profile.NoShutdownHook)
+		//defer p.Stop()
 	}
 
 	if serverMode {
@@ -67,11 +75,17 @@ func serveLoop(packetData []byte) {
 	if err := serv.Listen(); err != nil {
 		log.Fatalf("error listening: %s\n", err)
 	}
+	printed := false
 	for {
 		select {
 		case <-c:
 			return
 		default:
+		}
+
+		if !printed && serverTime+1.0 > runTime {
+			log.Printf("%d sent in %f seconds\n", serv.sendCount, serverTime)
+			printed = true
 		}
 		serv.Update(serverTime)
 		// do simulation/process payload packets

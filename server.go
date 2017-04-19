@@ -22,6 +22,8 @@ type Server struct {
 	clients      []*clientInstance // our slice of clients, pre allocated
 	lastSendTime float64           // last time we sent data
 	serverTime   float64           // the last serverTime/time Update was called
+	sendCount    int
+	printed      bool
 }
 
 // super basic ping packet
@@ -73,15 +75,17 @@ DONE:
 
 // iterate over client list and check if we should remove their entry (by setting the properties to 0 values/nil)
 func (s *Server) checkTimeouts(serverTime float64) {
+
 	for i := 0; i < len(s.clients); i += 1 {
 		instance := s.clients[i]
-		// timeout if lastRecvTime + runTime + 1 second is > server time.
+		// timeout if lastRecvTime + runTime + 1 second is < server time.
 		if instance.address != nil && instance.lastRecvTime+runTime+1.0 < serverTime {
 			log.Printf("client: (%s) sent %d/%d payload/pings\n", instance.address.String(), instance.payloadCount, instance.pingCount)
 			instance.address = nil
 			instance.lastRecvTime = 0
 			instance.payloadCount = 0
 			instance.pingCount = 0
+			log.Printf("STATS: sent %d packets in %f\n", s.sendCount, serverTime)
 		}
 	}
 }
@@ -96,13 +100,13 @@ func (s *Server) Send(data []byte) {
 	for i := 0; i < len(s.clients); i += 1 {
 		if s.clients[i].address != nil {
 			go s.conn.WriteTo(data, s.clients[i].address)
+			s.sendCount++
 		}
 	}
 }
 
 // process the packet data, finds first empty entry in our client list
 func (s *Server) OnPacketData(data []byte, addr *net.UDPAddr) {
-
 	// already exists? update
 	for i := 0; i < len(s.clients); i += 1 {
 		instance := s.clients[i]

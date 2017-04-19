@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"net"
+	"sync"
 )
 
 // our struct for passing data and client addresses around
@@ -30,6 +31,7 @@ type NetcodeConn struct {
 	sendSize   int // how many bytes to send
 	maxBytes   int // maximum allowed bytes
 	maxPackets int // maximum number of packets (not used in this version)
+	xmitBuf    sync.Pool
 
 	recvHandlerFn NetcodeRecvHandler
 }
@@ -45,6 +47,7 @@ func NewNetcodeConn() *NetcodeConn {
 	c.maxPackets = MAX_PACKETS
 	c.recvSize = SOCKET_RCVBUF_SIZE
 	c.sendSize = SOCKET_SNDBUF_SIZE
+
 	return c
 }
 
@@ -71,7 +74,7 @@ func (c *NetcodeConn) WriteTo(b []byte, to *net.UDPAddr) (int, error) {
 	if c.isClosed {
 		return -1, errors.New("unable to write, socket has been closed")
 	}
-	return c.conn.WriteTo(b, to)
+	return c.conn.WriteToUDP(b, to)
 }
 
 func (c *NetcodeConn) Close() error {
@@ -133,6 +136,9 @@ func (c *NetcodeConn) Listen(address *net.UDPAddr) error {
 
 func (c *NetcodeConn) create() error {
 	c.isClosed = false
+	c.xmitBuf.New = func() interface{} {
+		return make([]byte, c.maxBytes)
+	}
 	c.conn.SetReadBuffer(c.recvSize)
 	c.conn.SetWriteBuffer(c.sendSize)
 	go c.readLoop()
@@ -161,9 +167,9 @@ func (c *NetcodeConn) read() (*netcodeData, error) {
 	var n int
 	var from *net.UDPAddr
 	var err error
-	netData := &netcodeData{}
-	netData.data = make([]byte, c.maxBytes)
-	n, from, err = c.conn.ReadFromUDP(netData.data)
+
+	data := c.xmitBuf.Get().([]byte)[:c.maxBytes]
+	n, from, err = c.conn.ReadFromUDP(data)
 	if err != nil {
 		return nil, err
 	}
@@ -175,20 +181,22 @@ func (c *NetcodeConn) read() (*netcodeData, error) {
 	if n > c.maxBytes {
 		return nil, errors.New("packet size was > maxBytes")
 	}
-
-	netData.data = netData.data[:n]
+	netData := &netcodeData{}
+	netData.data = data[:n]
 	netData.from = from
 	return netData, nil
 }
 
 // dispatch the netcodeData to the bound recvHandler function.
 func (c *NetcodeConn) readLoop() {
-	dataCh := make(chan *netcodeData)
+	dataCh := make(chan *netcodeData, c.maxPackets)
 	go c.receiver(dataCh)
+
 	for {
 		select {
 		case data := <-dataCh:
-			c.recvHandlerFn(data)
+			//c.conn.WriteTo(data.data, data.from)
+			go c.recvHandlerFn(data)
 		case <-c.closeCh:
 			return
 		}
